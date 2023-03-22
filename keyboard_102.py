@@ -5,7 +5,6 @@ from evdev import UInput, ecodes as e
 import logging
  
 # TODO:
-# Add an exception for handling Shift + [
 # Add a new keymap for when CODE is held. Need to add chars: \ | ` ~ { }
  
 
@@ -43,15 +42,18 @@ keymap = [
 GPIO.setmode(GPIO.BOARD)
  
 for row in rows:
-    logging.info(f"Setting pin {row} as an output")
+    #logging.debug(f"Setting pin {row} as an output")
     GPIO.setup(row, GPIO.OUT)
  
 for col in cols:
-    logging.info(f"Setting pin {col} as an input")
+    #logging.debug(f"Setting pin {col} as an input")
     GPIO.setup(col, GPIO.IN, pull_up_down = GPIO.PUD_DOWN)
  
+# Set object to store pressed keys
 pressed = set()
+# Normal polling rate
 sleep_time = 1/60
+# Keep track of how many keyboard polls since the last keypress
 polls_since_press = 0
  
 while True:
@@ -61,19 +63,42 @@ while True:
         logging.debug(f"Setting row {i} high, pin {rows[i]}")
         GPIO.output(rows[i], GPIO.HIGH)
         for j in range(len(cols)):
+            # Look up the keycode in our map
             keycode = i * (len(rows) + 1) + j
             logging.debug(f"Checking column {j}, pin {cols[j]} which results in key {keymap[keycode]}")
             newval = GPIO.input(cols[j]) == GPIO.HIGH
+
+            # Detect a newly pressed key (Is our pressed key not yet in the set of pressed keys?)
             if  newval and not keycode in pressed:
+                
+                # Add it to the set
                 pressed.add(keycode)
-                logging.info(f"Pressed {keycode} which results in key {e.KEY[keymap[keycode]]} Column {i} Row {j}")
-                ui.write(e.EV_KEY, keymap[keycode], 1)
+
+                # Record the pressed key state to the system, but conditionally process KEY_LEFTBRACE + SHIFT press exception
+                if keycode == 21 and 8 in pressed:
+                    # Push the release of the SHIFT key event
+                    ui.write(e.EV_KEY, keymap[8], 0)
+                    #  Add the right brace key
+                    logging.info(f"Pressed {keycode} but process e.KEY_RIGHTBRACE instead due to SHIFT")
+                    ui.write(e.EV_KEY, e.KEY_RIGHTBRACE, 1)
+                else: 
+                    logging.info(f"Pressed {keycode} which results in key {e.KEY[keymap[keycode]]} Column {i} Row {j}")
+                    ui.write(e.EV_KEY, keymap[keycode], 1)
+
                 syn = True
+
+            # Detect if the key is released (If there was a state change, was our pressed key in the set of pressed keys?)
             elif not newval and keycode in pressed:
                 pressed.discard(keycode)
                 logging.info(f"Released {keycode} which results in key {e.KEY[keymap[keycode]]}")
-                ui.write(e.EV_KEY, keymap[keycode], 0)
+                # Record the released key state to the system, but conditionally process KEY_LEFTBRACE + SHIFT release exception
+                if keycode == 21 and 8 in pressed:
+                    ui.write(e.EV_KEY, e.KEY_RIGHTBRACE, 0)
+                else: 
+                    ui.write(e.EV_KEY, keymap[keycode], 0)
+
                 syn = True
+
         GPIO.output(rows[i], GPIO.LOW)
     if syn:
         ui.syn()
