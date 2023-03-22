@@ -1,0 +1,6 @@
+Tandy 102 cable:  150mm long
+ Connection: 
+    * 24 mm wide
+    * At the ends including the stiffeners it is 0.5mm thick. 
+    * It is 18 conductors with a 1.27mm (0.050”) pitch. 
+    
