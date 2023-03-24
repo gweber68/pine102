@@ -1,0 +1,8 @@
+Special key mappings:
+
+CODE / = "\"    :   send KEY_BACKSLASH
+CODE 1 = "|"    :   send KEY_LEFTSHIFT + KEY_BACKSLASH
+CODE 9 = "{"    :   send KEY_LEFTSHIFT + KEY_LEFTBRACE
+CODE 0 = "}"    :   send KEY_LEFTSHIFT + KEY_RIGHTBRACE
+SHIFT BS = DEL  : unsend KEY_LEFTSHIFT, send KEY_DELETE
+SHIFT [ = "]"   : unsend KEY_LEFTSHIFT, send KEY_RIGHTBRACE
