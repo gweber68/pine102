@@ -2,13 +2,24 @@
 import RPi.GPIO as GPIO
 from time import sleep
 from evdev import UInput, ecodes as e
-import logging
- 
-# TODO:
-# Add a new keymap for when CODE is held. Need to add chars: \ | ` ~ { }
- 
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Logging removed for improving keystroke response
+#import logging
+ 
+# ================= Special keyboard handling =================
+# [GW]: I tried to create a whole new keymap for when the CODE key is held, but since most of the keys
+# require two events to be generated (SHIFT + some other key), there's no way to represent that in a keymap.
+#
+# Created special logic for each of these:
+#       
+#       SHIFT BS = "DEL": unpress KEY_LEFTSHIFT, press KEY_DELETE
+#       SHIFT [ = "]" : unpress KEY_LEFTSHIFT, press KEY_RIGHTBRACE
+#       CODE 1 = "|"  : press KEY_LEFTSHIFT + KEY_BACKSLASH
+#       CODE 9 = "{"  : press KEY_LEFTSHIFT + KEY_LEFTBRACE
+#       CODE 0 = "}"  : press KEY_LEFTSHIFT + KEY_RIGHTBRACE
+#       CODE / = "\"  : press KEY_BACKSLASH (this could have been in a new keymap, but why create a whole keymap for only one key?)
+
+#logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 #logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 #logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
  
@@ -55,17 +66,20 @@ pressed = set()
 sleep_time = 1/60
 # Keep track of how many keyboard polls since the last keypress
 polls_since_press = 0
- 
+
+shifted_key = 0
+coded_key = 0 
+
 while True:
     sleep(sleep_time)
     syn = False
     for i in range(len(rows)):
-        logging.debug(f"Setting row {i} high, pin {rows[i]}")
+        #logging.debug(f"Setting row {i} high, pin {rows[i]}")
         GPIO.output(rows[i], GPIO.HIGH)
         for j in range(len(cols)):
             # Look up the keycode in our map
             keycode = i * (len(rows) + 1) + j
-            logging.debug(f"Checking column {j}, pin {cols[j]} which results in key {keymap[keycode]}")
+            #logging.debug(f"Checking column {j}, pin {cols[j]} which results in key {keymap[keycode]}")
             newval = GPIO.input(cols[j]) == GPIO.HIGH
 
             # Detect a newly pressed key (Is our pressed key not yet in the set of pressed keys?)
@@ -74,28 +88,104 @@ while True:
                 # Add it to the set
                 pressed.add(keycode)
 
-                # Record the pressed key state to the system, but conditionally process KEY_LEFTBRACE + SHIFT press exception
-                if keycode == 21 and 8 in pressed:
-                    # Push the release of the SHIFT key event
-                    ui.write(e.EV_KEY, keymap[8], 0)
-                    #  Add the right brace key
-                    logging.info(f"Pressed {keycode} but process e.KEY_RIGHTBRACE instead due to SHIFT")
+                # SHIFT BS - Generate DEL
+                if keycode == 15 and 8 in pressed:
+                    #logging.info(f"Pressed {keycode} but actually press e.KEY_DELETE instead due to SHIFT key")
+                    # Release the SHIFT key
+                    ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
+                    # Press the DEL key
+                    ui.write(e.EV_KEY, e.KEY_DELETE, 1)
+                    shifted_key = e.KEY_DELETE
+
+                # SHIFT [ - Generate right brace
+                elif keycode == 21 and 8 in pressed:
+                    #logging.info(f"Pressed {keycode} but actually press e.KEY_RIGHTBRACE instead due to SHIFT key")
+                    # Release the SHIFT key
+                    ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
+                    # Press the right brace key
                     ui.write(e.EV_KEY, e.KEY_RIGHTBRACE, 1)
+                    shifted_key = e.KEY_RIGHTBRACE
+
+                # CODE / - Generate backslash
+                elif keycode == 66 and 35 in pressed:
+                    #logging.info(f"Pressed {keycode} but actually press e.KEY_BACKSLASH instead due to CODE key")
+                    ui.write(e.EV_KEY, e.KEY_BACKSLASH, 1)
+                    coded_key = e.KEY_BACKSLASH
+
+                # CODE 1 - Generate verticle bar
+                elif keycode == 4 and 35 in pressed:
+                    #logging.info(f"Pressed {keycode} but actually press e.KEY_LEFTSHIFT + e.KEY_BACKSLASH instead due to CODE key")
+                    # Send SHIFT \ to get a |
+                    ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
+                    ui.write(e.EV_KEY, e.KEY_BACKSLASH, 1)
+                    coded_key = e.KEY_BACKSLASH
+
+                # CODE 9 - Generate Left curly brace
+                elif keycode == 5 and 35 in pressed:
+                    #logging.info(f"Pressed {keycode} but actually press e.KEY_LEFTSHIFT + e.KEY_LEFTBRACE instead due to CODE key")
+                    # Send SHIFT [ to get a {
+                    ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
+                    ui.write(e.EV_KEY, e.KEY_LEFTBRACE, 1)
+                    coded_key = e.KEY_LEFTBRACE
+
+                # CODE 0 - Generate Right curly brace
+                elif keycode == 14 and 35 in pressed:
+                    #logging.info(f"Pressed {keycode} but actually press e.KEY_LEFTSHIFT + e.KEY_RIGHTBRACE instead due to CODE key")
+                    # Send SHIFT ] to get a }
+                    ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
+                    ui.write(e.EV_KEY, e.KEY_RIGHTBRACE, 1)
+                    coded_key = e.KEY_RIGHTBRACE
+
+                # Otherwise record the normal pressed key state to the system
                 else: 
-                    logging.info(f"Pressed {keycode} which results in key {e.KEY[keymap[keycode]]} Column {i} Row {j}")
+                    #logging.info(f"Pressed {keycode} which results in key {e.KEY[keymap[keycode]]} Column {i} Row {j}")
                     ui.write(e.EV_KEY, keymap[keycode], 1)
 
                 syn = True
 
             # Detect if the key is released (If there was a state change, was our pressed key in the set of pressed keys?)
             elif not newval and keycode in pressed:
-                pressed.discard(keycode)
-                logging.info(f"Released {keycode} which results in key {e.KEY[keymap[keycode]]}")
-                # Record the released key state to the system, but conditionally process KEY_LEFTBRACE + SHIFT release exception
-                if keycode == 21 and 8 in pressed:
+                
+                # Record the released key state to the system - process all exceptions
+                if keycode == 15 and 8 in pressed:
+                    #logging.info(f"Released {keycode} but actually release e.KEY_DELETE due to SHIFT key")
+                    ui.write(e.EV_KEY, e.KEY_DELETE, 0)
+                elif keycode == 21 and 8 in pressed:
+                    #logging.info(f"Released {keycode} but actually release e.KEY_RIGHTBRACE due to SHIFT key")
                     ui.write(e.EV_KEY, e.KEY_RIGHTBRACE, 0)
+                elif keycode == 66 and 35 in pressed:
+                    #logging.info(f"Released {keycode} but actually release e.KEY_BACKSLASH instead due to CODE key")
+                    ui.write(e.EV_KEY, e.KEY_BACKSLASH, 0)
+                elif keycode == 4 and 35 in pressed:
+                    #logging.info(f"Released {keycode} but actually release e.KEY_LEFTSHIFT + e.KEY_BACKSLASH instead due to CODE key")
+                    ui.write(e.EV_KEY, e.KEY_BACKSLASH, 0)
+                    ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
+                elif keycode == 5 and 35 in pressed:
+                    #logging.info(f"Released {keycode} but actually release e.KEY_LEFTSHIFT + e.KEY_LEFTBRACE instead due to CODE key")
+                    ui.write(e.EV_KEY, e.KEY_LEFTBRACE, 0)
+                    ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
+                elif keycode == 14 and 35 in pressed:
+                    #logging.info(f"Released {keycode} but actually release e.KEY_LEFTSHIFT + e.KEY_RIGHTBRACE instead due to CODE key")
+                    ui.write(e.EV_KEY, e.KEY_RIGHTBRACE, 0)
+                    ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
                 else: 
+                    #logging.info(f"Released {keycode} which results in key {e.KEY[keymap[keycode]]}")
                     ui.write(e.EV_KEY, keymap[keycode], 0)
+
+                # If CODE was released while another is still being held down:
+                # 1. Release this extra key to prevent continuous key repeat
+                # 2. Release the shift key
+                if keycode == 35 and len(pressed)>1:
+                    #logging.info(f"Also releasing {coded_key} and SHIFT")
+                    ui.write(e.EV_KEY, coded_key, 0)
+                    ui.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
+                # If SHIFT was released while another is still being held down, release any specially modded key to prevent continuous repeat
+                if keycode == 8 and len(pressed)>1:
+                    #logging.info(f"Also releasing {shifted_key}")
+                    ui.write(e.EV_KEY, shifted_key, 0)
+
+                # Remove it from the set
+                pressed.discard(keycode)
 
                 syn = True
 
@@ -108,8 +198,8 @@ while True:
         polls_since_press = polls_since_press + 1
  
     if polls_since_press == 600:
-        logging.info(f"Reducing polling rate")
+        #logging.info(f"Reducing polling rate")
         sleep_time = 1/10
     elif polls_since_press == 1200:
-        logging.info(f"Reducing polling rate again")
+        #logging.info(f"Reducing polling rate again")
         sleep_time = 1/5
