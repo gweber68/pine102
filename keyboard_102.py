@@ -82,7 +82,9 @@ while True:
             #logging.debug(f"Checking column {j}, pin {cols[j]} which results in key {keymap[keycode]}")
             newval = GPIO.input(cols[j]) == GPIO.HIGH
 
+            # ========================================================================================================================
             # Detect a newly pressed key (Is our pressed key not yet in the set of pressed keys?)
+            # ========================================================================================================================
             if  newval and not keycode in pressed:
                 
                 # Add it to the set
