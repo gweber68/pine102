@@ -10,7 +10,7 @@ import logging
 # Support for Num-Lock with the numlock_keymap.  This requires a modified Tandy keyboard that has the Num-Lock
 # mechanical locking keyswitch replaced with a momentary-contact keyswitch, like that of most keys on the keyboard.
 # This will mean a user can press Num-lock it will simply switch a state, not remain locked down in the ON position.
-# numlock_keymap[] contains the modified keyboard layout including the numeric keys for m,j,k,l,u,i and p.
+# numlock_keymap[] contains the modified keyboard layout including the numeric keys for m,j,k,l,u,i and o.
 #
 # I also tried to create a whole new keymap for when the CODE key is held, but since most of the keys require two
 # events to be generated (shift + some other key), there's no way to represent that in a keymap. Thus I had to create
